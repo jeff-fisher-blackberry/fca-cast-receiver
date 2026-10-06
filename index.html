@@ -57,6 +57,9 @@
   </style>
 </head>
 <body>
+  <!-- Hardware display wake lock anchor for Chromecast OS -->
+  <audio id="keepalive-anchor" loop muted playsinline src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="></audio>
+
   <div id="standby-card">
     <svg id="crest-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="50" cy="50" r="46" stroke="#E8D5B5" stroke-width="2"/>
@@ -78,6 +81,16 @@
     let ytPlayer = null;
     let isYtReady = false;
     let isCcEnabled = false;
+
+    function engageWakeLocks() {
+      const anchor = document.getElementById('keepalive-anchor');
+      if (anchor && anchor.paused) {
+        anchor.play().catch(() => {});
+      }
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').catch(() => {});
+      }
+    }
 
     function broadcastStatus() {
       if (!ytPlayer || !context) return;
@@ -132,15 +145,18 @@
         events: {
           onReady: () => {
             isYtReady = true;
-            // Start CAF v3 with a 24-hour maxInactivity window
+            // Start CAF v3 with idle timeout disabled and a 24-hour maxInactivity window
             const receiverOptions = {
-              maxInactivity: 86400, // 24 hours
+              disableIdleTimeout: true, // Overrides the 300s CAF application shutdown
+              maxInactivity: 86400,      // 24-hour sender socket lease
               statusText: 'French Cooking Academy'
             };
             context.start(receiverOptions);
           },
           onStateChange: (event) => {
-            if (event.data === YT.PlayerState.ENDED) {
+            if (event.data === YT.PlayerState.PLAYING) {
+              engageWakeLocks();
+            } else if (event.data === YT.PlayerState.ENDED) {
               document.getElementById('player-container').style.display = 'none';
               document.getElementById('standby-card').style.display = 'block';
             }
@@ -167,10 +183,12 @@
       if (data.action === 'LOAD_VIDEO') {
         document.getElementById('standby-card').style.display = 'none';
         document.getElementById('player-container').style.display = 'block';
+        engageWakeLocks();
         if (isYtReady && ytPlayer) {
           ytPlayer.loadVideoById(data.videoId, data.startSeconds || 0);
         }
       } else if (data.action === 'PLAY') {
+        engageWakeLocks();
         ytPlayer && ytPlayer.playVideo();
       } else if (data.action === 'PAUSE') {
         ytPlayer && ytPlayer.pauseVideo();
