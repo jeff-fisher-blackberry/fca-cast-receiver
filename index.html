@@ -57,9 +57,6 @@
   </style>
 </head>
 <body>
-  <!-- Hardware display wake lock anchor for Chromecast OS -->
-  <audio id="keepalive-anchor" loop muted playsinline src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="></audio>
-
   <div id="standby-card">
     <svg id="crest-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="50" cy="50" r="46" stroke="#E8D5B5" stroke-width="2"/>
@@ -83,10 +80,6 @@
     let isCcEnabled = false;
 
     function engageWakeLocks() {
-      const anchor = document.getElementById('keepalive-anchor');
-      if (anchor && anchor.paused) {
-        anchor.play().catch(() => {});
-      }
       if ('wakeLock' in navigator) {
         navigator.wakeLock.request('screen').catch(() => {});
       }
@@ -112,12 +105,11 @@
           ccEnabled: isCcEnabled
         };
 
-        const payloadString = JSON.stringify(statusPayload);
         const senders = (typeof context.getSenders === 'function') ? context.getSenders() : [];
         if (senders && senders.length > 0) {
           senders.forEach(sender => {
             try {
-              context.sendCustomMessage(CUSTOM_CHANNEL, sender.id, payloadString);
+              context.sendCustomMessage(CUSTOM_CHANNEL, sender.id, statusPayload);
             } catch (e) {
               console.error("sendCustomMessage error to", sender.id, e);
             }
@@ -161,6 +153,19 @@
               document.getElementById('standby-card').style.display = 'block';
             }
             broadcastStatus();
+          },
+          onError: (event) => {
+            console.error('YouTube Player Error:', event.data);
+            const errorPayload = {
+              action: 'PLAYER_ERROR',
+              errorCode: event.data
+            };
+            const senders = (typeof context.getSenders === 'function') ? context.getSenders() : [];
+            senders.forEach(sender => {
+              try {
+                context.sendCustomMessage(CUSTOM_CHANNEL, sender.id, errorPayload);
+              } catch (e) {}
+            });
           }
         }
       });
