@@ -77,6 +77,50 @@
     const CUSTOM_CHANNEL = 'urn:x-cast:com.example.frenchcookingacademy';
     let ytPlayer = null;
     let isYtReady = false;
+    let isCcEnabled = false;
+    let lastSenderId = null;
+
+    function broadcastStatus() {
+      if (!ytPlayer || !isYtReady) return;
+      let currentTime = 0;
+      let duration = 0;
+      let isPlaying = false;
+      try {
+        currentTime = (typeof ytPlayer.getCurrentTime === 'function') ? ytPlayer.getCurrentTime() : 0;
+        duration = (typeof ytPlayer.getDuration === 'function') ? ytPlayer.getDuration() : 0;
+        const state = (typeof ytPlayer.getPlayerState === 'function') ? ytPlayer.getPlayerState() : -1;
+        isPlaying = (state === YT.PlayerState.PLAYING);
+      } catch (e) {
+        console.error("Error reading ytPlayer status:", e);
+      }
+
+      const statusPayload = {
+        action: 'STATUS_UPDATE',
+        currentTime: currentTime,
+        duration: duration,
+        isPlaying: isPlaying,
+        ccEnabled: isCcEnabled
+      };
+
+      try {
+        const senders = (typeof context.getSenders === 'function') ? context.getSenders() : [];
+        if (senders && senders.length > 0) {
+          senders.forEach(sender => {
+            try {
+              context.sendCustomMessage(CUSTOM_CHANNEL, sender.id, statusPayload);
+            } catch (e) {
+              console.error("sendCustomMessage error to", sender.id, e);
+            }
+          });
+        } else if (lastSenderId) {
+          context.sendCustomMessage(CUSTOM_CHANNEL, lastSenderId, statusPayload);
+        }
+      } catch (e) {
+        console.error("broadcastStatus send error:", e);
+      }
+    }
+
+    setInterval(broadcastStatus, 1000);
 
     function onYouTubeIframeAPIReady() {
       ytPlayer = new YT.Player('yt-player', {
@@ -98,18 +142,28 @@
               document.getElementById('player-container').style.display = 'none';
               document.getElementById('standby-card').style.display = 'block';
             }
+            broadcastStatus();
           }
         }
       });
     }
 
     context.addCustomMessageListener(CUSTOM_CHANNEL, (customEvent) => {
+      if (customEvent.senderId) {
+        lastSenderId = customEvent.senderId;
+      }
       const data = customEvent.data;
       if (data.action === 'LOAD_VIDEO') {
         document.getElementById('standby-card').style.display = 'none';
         document.getElementById('player-container').style.display = 'block';
         if (isYtReady && ytPlayer) {
           ytPlayer.loadVideoById(data.videoId, data.startSeconds || 0);
+          if (isCcEnabled) {
+            try {
+              ytPlayer.loadModule('captions');
+              ytPlayer.setOption('captions', 'track', { languageCode: 'en' });
+            } catch (e) {}
+          }
         }
       } else if (data.action === 'PLAY') {
         ytPlayer && ytPlayer.playVideo();
@@ -117,6 +171,22 @@
         ytPlayer && ytPlayer.pauseVideo();
       } else if (data.action === 'SEEK') {
         ytPlayer && ytPlayer.seekTo(data.positionSeconds, true);
+      } else if (data.action === 'TOGGLE_CC' || data.action === 'SET_CC') {
+        isCcEnabled = (data.action === 'SET_CC') ? !!data.enabled : !isCcEnabled;
+        if (ytPlayer) {
+          try {
+            if (isCcEnabled) {
+              ytPlayer.loadModule('captions');
+              ytPlayer.setOption('captions', 'track', { languageCode: 'en' });
+            } else {
+              ytPlayer.unloadModule('captions');
+              ytPlayer.setOption('captions', 'track', {});
+            }
+          } catch (e) {
+            console.error('CC error:', e);
+          }
+        }
+        broadcastStatus();
       }
     });
   </script>
