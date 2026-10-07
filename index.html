@@ -157,8 +157,37 @@
             if (event.data === YT.PlayerState.PLAYING) {
               engageWakeLocks();
             } else if (event.data === YT.PlayerState.ENDED) {
-              document.getElementById('player-container').style.display = 'none';
-              document.getElementById('standby-card').style.display = 'block';
+              console.log('Video finished playing - returning to standby');
+              try {
+                if (ytPlayer && typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+              } catch (e) {}
+
+              const playerContainer = document.getElementById('player-container');
+              const standbyCard = document.getElementById('standby-card');
+              if (playerContainer) playerContainer.style.display = 'none';
+              if (standbyCard) standbyCard.style.display = 'block';
+
+              currentVideoId = '';
+              currentVideoTitle = '';
+              context.setApplicationState('French Cooking Academy');
+
+              const statusPayload = {
+                action: 'STATUS_UPDATE',
+                videoId: '',
+                title: '',
+                currentTime: 0,
+                duration: 0,
+                isPlaying: false,
+                hasActiveMedia: false,
+                ccEnabled: isCcEnabled
+              };
+
+              const senders = (typeof context.getSenders === 'function') ? context.getSenders() : [];
+              senders.forEach(sender => {
+                try {
+                  context.sendCustomMessage(CUSTOM_CHANNEL, sender.id, statusPayload);
+                } catch (e) {}
+              });
             }
             broadcastStatus();
           },
