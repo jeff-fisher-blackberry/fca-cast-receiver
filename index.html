@@ -78,6 +78,8 @@
     let ytPlayer = null;
     let isYtReady = false;
     let isCcEnabled = false;
+    let currentVideoId = '';
+    let currentVideoTitle = '';
 
     function engageWakeLocks() {
       if ('wakeLock' in navigator) {
@@ -99,6 +101,8 @@
 
         const statusPayload = {
           action: 'STATUS_UPDATE',
+          videoId: currentVideoId,
+          title: currentVideoTitle,
           currentTime: currentTime,
           duration: duration,
           isPlaying: isPlaying,
@@ -144,6 +148,9 @@
               statusText: 'French Cooking Academy'
             };
             context.start(receiverOptions);
+            context.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED, (event) => {
+              broadcastStatus();
+            });
           },
           onStateChange: (event) => {
             if (event.data === YT.PlayerState.PLAYING) {
@@ -186,12 +193,17 @@
         return;
       }
       if (data.action === 'LOAD_VIDEO') {
+        currentVideoId = data.videoId || '';
+        currentVideoTitle = data.title || '';
+        context.setApplicationState('Playing: ' + (currentVideoTitle || 'French Cooking Academy'));
         document.getElementById('standby-card').style.display = 'none';
         document.getElementById('player-container').style.display = 'block';
         engageWakeLocks();
         if (isYtReady && ytPlayer) {
-          ytPlayer.loadVideoById(data.videoId, data.startSeconds || 0);
+          ytPlayer.loadVideoById(currentVideoId, data.startSeconds || 0);
         }
+      } else if (data.action === 'GET_STATUS') {
+        broadcastStatus();
       } else if (data.action === 'PLAY') {
         engageWakeLocks();
         ytPlayer && ytPlayer.playVideo();
