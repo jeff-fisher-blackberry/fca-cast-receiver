@@ -226,8 +226,13 @@
           }
         }
       } else if (data.action === 'STOP') {
-        if (ytPlayer && typeof ytPlayer.stopVideo === 'function') {
-          ytPlayer.stopVideo();
+        try {
+          if (ytPlayer) {
+            if (typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+            if (typeof ytPlayer.clearVideo === 'function') ytPlayer.clearVideo();
+          }
+        } catch (e) {
+          console.error('Error stopping YouTube player:', e);
         }
         const playerContainer = document.getElementById('player-container');
         const standbyCard = document.getElementById('standby-card');
